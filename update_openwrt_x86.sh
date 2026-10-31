@@ -343,14 +343,34 @@ download_file() {
 }
 
 fetch_release_json() {
-    local url="$1"
-    download_file "$url" "$TMP_DIR/release-api.json" 60 || return 1
-    # 同时拒绝 HTML、空响应和非 JSON 响应。
-    jq -e 'type == "object" or type == "array"' "$TMP_DIR/release-api.json" >/dev/null || {
-        printf '❌ GitHub API 返回了无效数据。\n' >&2
-        return 1
-    }
-    cat "$TMP_DIR/release-api.json"
+    local url="$1" candidate filter='type == "object" or type == "array"'
+    local response="$TMP_DIR/release-api.json"
+    local -a urls=("$url")
+    # API 加速独立于固件下载选项，保留历史列表的分页查询参数。
+    [[ "$url" != https://api.github.com/* ]] || urls+=("https://gh-proxy.org/$url")
+    case "$url" in
+        */releases/latest)
+            filter='type == "object" and (.tag_name | type == "string" and length > 0) and (.assets | type == "array")' ;;
+        */releases\?*) filter='type == "array"' ;;
+    esac
+    for candidate in "${urls[@]}"; do
+        if [[ "$candidate" != "$url" ]]; then
+            printf '提示：GitHub API 直连未成功，正在切换加速访问...\n' >&2
+        fi
+        # 每次从空响应开始，避免失败时误用上一次查询的结果。
+        rm -f -- "$response" || return 1
+        if download_file "$candidate" "$response" 60; then
+            # 同时拒绝 HTML、空响应、限流错误对象和结构不符的数据。
+            if jq -e "$filter" "$response" >/dev/null 2>&1; then
+                cat "$response"
+                return $?
+            fi
+            printf '提示：GitHub API 返回了无效数据，无法读取版本信息。\n' >&2
+            jq -r 'objects | .message // empty' "$response" >&2 2>/dev/null || :
+        fi
+    done
+    printf '❌ 获取 GitHub 版本信息失败，请稍后重试。\n' >&2
+    return 1
 }
 
 select_release() {
