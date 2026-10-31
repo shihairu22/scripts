@@ -261,6 +261,15 @@ read_input() {
 
 prepare_aria2() {
     command -v aria2c >/dev/null 2>&1 && return 0
+    # 默认不自动安装 aria2（单连接实测已有 2.7 MB/s，收益有限，不往系统里塞包）。
+    # 需要多连接加速时：ARIA2_AUTO_INSTALL=1 sh update_openwrt.sh
+    if [[ ${ARIA2_AUTO_INSTALL:-0} != 1 ]]; then
+        [[ ${ARIA2_HINTED:-0} == 1 ]] || {
+            echo '未找到 aria2c，使用 wget/curl 下载（需要多连接可设 ARIA2_AUTO_INSTALL=1）。' >&2
+            ARIA2_HINTED=1
+        }
+        return 1
+    fi
     # aria2 是可选加速工具，安装失败不能阻断已有下载方式。
     [[ ${ARIA2_CHECKED:-0} == 0 ]] || return 1
     ARIA2_CHECKED=1
