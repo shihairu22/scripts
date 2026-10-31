@@ -288,7 +288,8 @@ download_file() {
     if [[ "$GITHUB_PROXY" == proxy:* ]]; then
         http_proxy_url="${GITHUB_PROXY#proxy:}"
         curl_options+=(--proxy "$http_proxy_url")
-        wget_options+=(-e use_proxy=yes -e "http_proxy=$http_proxy_url")
+        wget_options+=(-e use_proxy=yes -e "http_proxy=$http_proxy_url" -e "https_proxy=$http_proxy_url")
+        export http_proxy="$http_proxy_url" https_proxy="$http_proxy_url"
         aria2_options+=(--all-proxy="$http_proxy_url")
     fi
     # 仅固件启用分段下载，版本信息和校验文件保持安静。

@@ -17,6 +17,9 @@ fi
 X86_SCRIPT="${SCRIPT_DIR:+$SCRIPT_DIR/}update_openwrt_x86.sh"
 ROCKCHIP_SCRIPT="${SCRIPT_DIR:+$SCRIPT_DIR/}update_openwrt_rockchip.sh"
 REMOTE_BASE_URL="https://raw.githubusercontent.com/shihairu22/scripts/main"
+# 默认走我们自己的 NAS 代理拉脚本（直连 raw 实测超时）；可用 OPENWRT_UPDATE_PROXY 覆盖，
+# 设为空字符串则完全不使用代理。
+DEFAULT_PROXY="http://10.0.0.221:7890"
 BOOTSTRAP_DIR=""
 
 cleanup() {
@@ -35,21 +38,36 @@ fetch_and_exec() {
   trap 'exit 143' TERM
   tmp_file="$BOOTSTRAP_DIR/script.sh"
 
-  if command -v curl >/dev/null 2>&1; then
-    if curl -fsSL --connect-timeout 15 --max-time 120 --retry 2 \
-      "$REMOTE_BASE_URL/$remote_file" -o "$tmp_file.part"; then
-      downloaded=1
-    fi
+  # 代理：默认走 NAS，可达才用；否则直连
+  local proxy_url="${OPENWRT_UPDATE_PROXY-$DEFAULT_PROXY}"
+  if [[ -n "$proxy_url" ]] && ! curl -fsS --connect-timeout 3 --max-time 5 \
+       --proxy "$proxy_url" -o /dev/null "$REMOTE_BASE_URL/update_openwrt_x86.sh" 2>/dev/null; then
+    proxy_url=""
   fi
-  if [[ "$downloaded" == 0 ]] && command -v wget >/dev/null 2>&1; then
-    for attempt in 1 2 3; do
-      ((attempt == 1)) || printf 'Retrying download (%s/3)...\n' "$attempt" >&2
-      if wget -T 30 -O "$tmp_file.part" "$REMOTE_BASE_URL/$remote_file"; then
+  [[ -n "$proxy_url" ]] && export http_proxy="$proxy_url" https_proxy="$proxy_url"
+
+  # 候选地址：直连 → gh-proxy 镜像
+  local -a bases=("$REMOTE_BASE_URL" "https://gh-proxy.com/$REMOTE_BASE_URL")
+
+  local base
+  for base in "${bases[@]}"; do
+    ((downloaded == 0)) || break
+    if command -v curl >/dev/null 2>&1; then
+      if curl -fsSL --connect-timeout 10 --max-time 120 --retry 1 \
+        "$base/$remote_file" -o "$tmp_file.part"; then
         downloaded=1
-        break
       fi
-    done
-  fi
+    fi
+    if [[ "$downloaded" == 0 ]] && command -v wget >/dev/null 2>&1; then
+      for attempt in 1 2; do
+        ((attempt == 1)) || printf 'Retrying download (%s/2)...\n' "$attempt" >&2
+        if wget -T 20 -O "$tmp_file.part" "$base/$remote_file"; then
+          downloaded=1
+          break
+        fi
+      done
+    fi
+  done
   if [[ "$downloaded" == 0 || ! -s "$tmp_file.part" ]]; then
     echo "Error: failed to download $remote_file." >&2
     return 1
