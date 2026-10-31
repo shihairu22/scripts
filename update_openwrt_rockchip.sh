@@ -289,12 +289,18 @@ prepare_aria2() {
 download_file() {
     local url="$1" destination="$2" timeout="${3:-1800}" show_progress="${4:-0}"
     local partial="${destination}.part" attempt client downloaded
-    local -a curl_options=(-fsSL) wget_options=(-q) clients=(curl wget)
+    local -a curl_options=(-fsSL) wget_options=(-q) aria2_options=() clients=(curl wget)
     # 仅固件启用分段下载，版本信息和校验文件保持安静。
     if [[ "$show_progress" == 1 ]]; then
         curl_options=(-fL)
         wget_options=()
         clients=(aria2c wget curl)
+    fi
+    # 只限制 ghfast.top 的连接；其他下载源和 API 仍使用原有地址族选择。
+    if [[ "${url,,}" =~ ^https?://ghfast[.]top(:[0-9]+)?(/|$) ]]; then
+        curl_options+=(-4)
+        wget_options+=(-4)
+        aria2_options+=(--disable-ipv6=true)
     fi
     # 先写入临时文件，避免失败的下载被当成完整文件使用。
     for client in "${clients[@]}"; do
@@ -305,7 +311,7 @@ download_file() {
             aria2c)
                 prepare_aria2 || continue
                 echo '使用 aria2c 下载固件（最多 4 个连接）...' >&2
-                if aria2c --no-conf=true --split=4 --max-connection-per-server=4 \
+                if aria2c "${aria2_options[@]}" --no-conf=true --split=4 --max-connection-per-server=4 \
                     --min-split-size=4M --file-allocation=none --disk-cache=0 \
                     --auto-file-renaming=false --allow-overwrite=true \
                     --connect-timeout=15 --timeout=30 --max-tries=3 --retry-wait=2 \
