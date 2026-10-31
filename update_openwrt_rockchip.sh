@@ -21,7 +21,7 @@ C_B_GREEN='\033[1;32m'    # 粗体绿色
 C_B_YELLOW='\033[1;33m'   # 粗体黄色
 
 # --- 配置 ---
-REPO="xuanranran/OpenWrt_RockChip"                                        # 目标 GitHub 仓库
+REPO="shihairu22/OpenWrt_RockChip"                                        # 目标 GitHub 仓库
 # 注意：固件文件名将根据机型和Docker选择动态生成
 TMP_DIR="/tmp"                                                             # 临时文件目录
 WORK_RESERVE_KIB=65536                                                    # 为升级环境和解压缓冲预留 64 MiB

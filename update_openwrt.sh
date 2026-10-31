@@ -16,7 +16,7 @@ if [[ -f ${BASH_SOURCE[0]} ]]; then
 fi
 X86_SCRIPT="${SCRIPT_DIR:+$SCRIPT_DIR/}update_openwrt_x86.sh"
 ROCKCHIP_SCRIPT="${SCRIPT_DIR:+$SCRIPT_DIR/}update_openwrt_rockchip.sh"
-REMOTE_BASE_URL="https://raw.githubusercontent.com/xuanranran/scripts/main"
+REMOTE_BASE_URL="https://raw.githubusercontent.com/shihairu22/scripts/main"
 BOOTSTRAP_DIR=""
 
 cleanup() {

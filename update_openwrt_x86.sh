@@ -21,7 +21,7 @@ C_B_GREEN='\033[1;32m'    # 粗体绿色
 C_B_YELLOW='\033[1;33m'   # 粗体黄色
 
 # --- 配置 ---
-REPO="xuanranran/OpenWRT-X86_64"                                           # 目标 GitHub 仓库
+REPO="shihairu22/OpenWRT-X86_64"                                           # 目标 GitHub 仓库
 IMAGE_FILENAME_GZ="immortalwrt-x86-64-generic-squashfs-combined-efi.img.gz" # 压缩固件的文件名
 IMAGE_FILENAME_IMG="${IMAGE_FILENAME_GZ%.gz}"                             # 解压后的固件文件名
 CHECKSUM_FILENAME="sha256sums"                                             # 校验和文件名 (无 .txt 后缀)
@@ -283,6 +283,14 @@ download_file() {
     local url="$1" destination="$2" timeout="${3:-1800}" show_progress="${4:-0}"
     local partial="${destination}.part" attempt client downloaded
     local -a curl_options=(-fsSL) wget_options=(-q) aria2_options=() clients=(curl wget)
+    # GITHUB_PROXY 以 proxy: 开头表示走 HTTP 代理（不是前缀镜像）
+    local http_proxy_url=""
+    if [[ "$GITHUB_PROXY" == proxy:* ]]; then
+        http_proxy_url="${GITHUB_PROXY#proxy:}"
+        curl_options+=(--proxy "$http_proxy_url")
+        wget_options+=(-e use_proxy=yes -e "http_proxy=$http_proxy_url")
+        aria2_options+=(--all-proxy="$http_proxy_url")
+    fi
     # 仅固件启用分段下载，版本信息和校验文件保持安静。
     if [[ "$show_progress" == 1 ]]; then
         curl_options=(-fL)
@@ -546,28 +554,32 @@ check_dependencies() {
 # --- 选择 GitHub 访问方式 ---
 select_github_access() {
     ui_section 'GitHub 访问方式'
-    ui_option 1 'ghfast.top 镜像加速' '默认，推荐'
-    ui_field '说明' '适合网络受限环境。'
-    ui_field '说明' '通过镜像加速下载。'
-    ui_option 2 'GitHub 官方直连'
+    ui_option 1 '本地代理加速' '默认，推荐（我们自己的 NAS）'
+    ui_field '说明' '走局域网代理 10.0.0.221:7890，实测最快。'
+    ui_option 2 'gh-proxy.com 镜像加速'
+    ui_field '说明' '适合网络受限环境，走公共镜像。'
+    ui_option 3 'GitHub 官方直连'
     ui_field '说明' '需要稳定的国际网络连接。'
-    ui_field '说明' '直接从官方服务器下载。'
     read_input '请选择 [1/2]（默认：1）：' github_choice
     github_choice=${github_choice:-1}
     
     echo
     case "$github_choice" in
         1)
-            echo -e "${C_B_GREEN}✓ 已选择：${C_RESET}ghfast.top 镜像加速"
-            GITHUB_PROXY="https://ghfast.top/"
+            echo -e "${C_B_GREEN}✓ 已选择：${C_RESET}本地代理加速（10.0.0.221:7890）"
+            GITHUB_PROXY="proxy:http://10.0.0.221:7890"
             ;;
         2)
+            echo -e "${C_B_GREEN}✓ 已选择：${C_RESET}gh-proxy.com 镜像加速"
+            GITHUB_PROXY="https://gh-proxy.com/"
+            ;;
+        3)
             echo -e "${C_B_GREEN}✓ 已选择：${C_RESET}GitHub 官方直连"
             GITHUB_PROXY=""
             ;;
         *)
-            echo -e "${C_YELLOW}⚠ 无效选项，使用默认方式：${C_RESET}GitHub 官方直连"
-            GITHUB_PROXY=""
+            echo -e "${C_YELLOW}⚠ 无效选项，使用默认方式：${C_RESET}本地代理加速"
+            GITHUB_PROXY="proxy:http://10.0.0.221:7890"
             ;;
     esac
     echo
@@ -1025,14 +1037,15 @@ echo
 echo -e "${C_BLUE}--- 步骤 7: 下载文件 ---${C_RESET}"
 echo -e "${C_BLUE}信息：${C_RESET}正在下载压缩固件 '${C_CYAN}${IMAGE_FILENAME_GZ}${C_RESET}' 到 '${C_CYAN}${IMAGE_PATH_GZ}${C_RESET}' ..."
 check_download_resources || exit 1
-download_file "${GITHUB_PROXY}${IMAGE_URL}" "$IMAGE_PATH_GZ" 1800 1 || exit 1
+DL_BASE=""; [[ "$GITHUB_PROXY" == proxy:* ]] || DL_BASE="$GITHUB_PROXY"
+    download_file "${DL_BASE}${IMAGE_URL}" "$IMAGE_PATH_GZ" 1800 1 || exit 1
 echo -e "${C_B_GREEN}✅ 信息：${C_RESET}压缩固件下载完成。"
 
 # 下载校验文件
 if [ $SKIP_CHECKSUM -eq 0 ]; then
     echo -e "${C_BLUE}信息：${C_RESET}正在下载校验文件 '${C_CYAN}${CHECKSUM_FILENAME}${C_RESET}' 到 '${C_CYAN}${CHECKSUM_PATH}${C_RESET}' ..."
     dl_status=0
-    download_file "${GITHUB_PROXY}${CHECKSUM_URL}" "$CHECKSUM_PATH" 120 || dl_status=$?
+    download_file "${DL_BASE}${CHECKSUM_URL}" "$CHECKSUM_PATH" 120 || dl_status=$?
     if [ $dl_status -ne 0 ]; then
         echo -e "${C_YELLOW}警告：${C_RESET}下载校验文件 '${C_YELLOW}${CHECKSUM_FILENAME}${C_RESET}' 失败，将跳过文件完整性校验。"
         rm -f "$CHECKSUM_PATH"; SKIP_CHECKSUM=1;
