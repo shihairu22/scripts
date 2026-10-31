@@ -316,7 +316,7 @@ download_file() {
                     --auto-file-renaming=false --allow-overwrite=true \
                     --connect-timeout=15 --timeout=30 --max-tries=3 --retry-wait=2 \
                     --stop="$timeout" --summary-interval=0 --console-log-level=warn \
-                    --download-result=hide --enable-color=false --stderr=true \
+                    --download-result=hide --enable-color=true --stderr=true \
                     --dir="$(dirname -- "$partial")" --out="$(basename -- "$partial")" "$url" \
                     && [[ -s "$partial" && ! -e "$partial.aria2" ]]; then
                     downloaded=1
